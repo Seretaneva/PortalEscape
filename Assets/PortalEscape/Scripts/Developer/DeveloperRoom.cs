@@ -20,8 +20,10 @@ namespace PortalEscape
         private readonly Dictionary<string, PlacedArtifact> artifacts = new();
         private readonly WorldTouchInput input = new();
         private ArtifactSurface surface;
+        private ArtifactRegistry registry;
         private ArtifactDrag drag;
         private bool busy;
+        private bool roomMenuOpen;
 
         public Camera ArCamera => arCamera;
         public IReadOnlyList<ArtifactDefinition> Inventory => inventory;
@@ -31,6 +33,7 @@ namespace PortalEscape
         public PlacedArtifact Selection { get; private set; }
         public bool HoldingArtifact => drag != null;
         public bool Busy => busy;
+        internal int LayoutRevision { get; private set; }
         public string Status { get; private set; } = "Scaneaza camera si alege un artefact.";
 
         private void Awake()
@@ -62,12 +65,12 @@ namespace PortalEscape
         {
             foreach (var artifact in artifacts.Values)
                 if (artifact != null)
-                    surface.RemoveAnchor(artifact.Anchor);
+                    DestroyArtifact(artifact);
         }
 
         private void Update()
         {
-            if (!input.TryRead(!busy, out var gesture) || busy)
+            if (!input.TryRead(!busy && !roomMenuOpen, out var gesture) || busy || roomMenuOpen)
                 return;
 
             if (Mode == DeveloperMode.Edit)
@@ -100,7 +103,10 @@ namespace PortalEscape
         public void Rotate(float degrees)
         {
             if (!busy && Mode == DeveloperMode.Edit && Selection != null && !HoldingArtifact)
+            {
                 Selection.transform.Rotate(Vector3.up, degrees, Space.Self);
+                LayoutRevision++;
+            }
         }
 
         public void DeleteSelection()
@@ -111,9 +117,8 @@ namespace PortalEscape
             var artifact = Selection;
             Selection = null;
             artifacts.Remove(artifact.Id);
-            artifact.gameObject.SetActive(false);
-            surface.RemoveAnchor(artifact.Anchor);
-            Destroy(artifact.gameObject);
+            DestroyArtifact(artifact);
+            LayoutRevision++;
             input.Reset();
             Status = "Artefact sters.";
         }
@@ -219,6 +224,7 @@ namespace PortalEscape
                 drag = null;
                 anchor = null;
                 surface.RemoveAnchor(oldAnchor);
+                LayoutRevision++;
                 Status = "Artefact mutat.";
             }
             catch (Exception exception)
@@ -259,15 +265,13 @@ namespace PortalEscape
                     return;
                 }
 
-                root = new GameObject("Artifact");
-                root.SetActive(false);
-                var artifact = root.AddComponent<PlacedArtifact>();
-                artifact.Initialize(definition);
+                var artifact = CreateInactiveArtifact(definition, null, out root);
                 artifact.Attach(anchor, pose.rotation);
                 artifacts.Add(artifact.Id, artifact);
                 root.SetActive(true);
                 anchor = null;
                 root = null;
+                LayoutRevision++;
                 Status = "Artefact plasat.";
             }
             catch (Exception exception)
@@ -283,6 +287,77 @@ namespace PortalEscape
                 surface.RemoveAnchor(anchor);
                 busy = false;
             }
+        }
+
+        internal void SetRoomMenuOpen(bool open)
+        {
+            roomMenuOpen = open;
+            CancelDrag();
+            input.Reset();
+        }
+
+        internal void ReplaceLayout(ArtifactData[] layout, Pose origin)
+        {
+            if (busy)
+                throw new InvalidOperationException("Așteaptă finalizarea operației AR.");
+
+            if (layout.Length != 0)
+                registry ??= new ArtifactRegistry(inventory);
+            var staged = new List<PlacedArtifact>(layout.Length);
+            GameObject unfinished = null;
+            try
+            {
+                foreach (var data in layout)
+                {
+                    var artifact = CreateInactiveArtifact(registry.Resolve(data.typeId), data.id, out unfinished);
+                    staged.Add(artifact);
+                    unfinished = null;
+                    artifact.transform.SetPositionAndRotation(origin.position + origin.rotation * data.position,
+                        origin.rotation * data.rotation);
+                    artifact.transform.localScale = data.scale;
+                }
+            }
+            catch
+            {
+                if (unfinished != null)
+                    Destroy(unfinished);
+                foreach (var artifact in staged)
+                    Destroy(artifact.gameObject);
+                throw;
+            }
+
+            CancelDrag();
+            Selection = null;
+            input.Reset();
+            foreach (var artifact in artifacts.Values)
+                if (artifact != null)
+                    DestroyArtifact(artifact);
+            artifacts.Clear();
+
+            foreach (var artifact in staged)
+            {
+                artifacts.Add(artifact.Id, artifact);
+                artifact.gameObject.SetActive(true);
+            }
+
+            LayoutRevision++;
+            Status = staged.Count == 0 ? "Camera este goală." : "Cameră încărcată în originea temporară.";
+        }
+
+        private static PlacedArtifact CreateInactiveArtifact(ArtifactDefinition definition, string id, out GameObject root)
+        {
+            root = new GameObject("Artifact");
+            root.SetActive(false);
+            var artifact = root.AddComponent<PlacedArtifact>();
+            artifact.Initialize(definition, id);
+            return artifact;
+        }
+
+        private void DestroyArtifact(PlacedArtifact artifact)
+        {
+            artifact.gameObject.SetActive(false);
+            surface.RemoveAnchor(artifact.Anchor);
+            Destroy(artifact.gameObject);
         }
     }
 }

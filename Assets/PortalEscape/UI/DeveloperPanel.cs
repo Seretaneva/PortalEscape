@@ -7,7 +7,7 @@ namespace PortalEscape
     [RequireComponent(typeof(DeveloperRoom))]
     public sealed class DeveloperPanel : MonoBehaviour
     {
-        private static readonly Color PanelColor = new(0.07f, 0.10f, 0.14f, 0.96f);
+        internal static readonly Color PanelColor = new(0.07f, 0.10f, 0.14f, 0.96f);
         private static readonly Color ButtonColor = new(0.17f, 0.23f, 0.30f);
         private static readonly Color ActiveColor = new(0.08f, 0.40f, 0.46f);
 
@@ -22,6 +22,7 @@ namespace PortalEscape
         private Button rotateLeft;
         private Button rotateRight;
         private Button delete;
+        private RoomPanel rooms;
         private readonly List<Button> modes = new();
         private readonly List<Button> choices = new();
         private Rect previousSafeArea;
@@ -86,6 +87,7 @@ namespace PortalEscape
             rotateRight = AddButton(editPanel, "+15°", () => room.Rotate(15f));
             deletePanel = Row(panel, 49, 46);
             delete = AddButton(deletePanel, "Sterge selectia", room.DeleteSelection);
+            rooms = new RoomPanel(this, room, safeArea);
         }
 
         private void LateUpdate()
@@ -127,6 +129,7 @@ namespace PortalEscape
                 : selection != null ? selection.Definition.DisplayName : null;
             status.text = label == null ? room.Status : $"{label}  |  {room.Status}";
             UpdateMarker(selection);
+            rooms.Update();
         }
 
         private void UpdateMarker(PlacedArtifact selection)
@@ -148,14 +151,14 @@ namespace PortalEscape
             }
         }
 
-        private static RectTransform Rect(string name, Transform parent)
+        internal static RectTransform Rect(string name, Transform parent)
         {
             var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
             rect.SetParent(parent, false);
             return rect;
         }
 
-        private static RectTransform Row(Transform parent, float bottom, float height, float padding = 8)
+        internal static RectTransform Row(Transform parent, float bottom, float height, float padding = 8)
         {
             var row = Rect("Row", parent);
             row.anchorMin = Vector2.zero;
@@ -166,7 +169,7 @@ namespace PortalEscape
             return row;
         }
 
-        private Button AddButton(RectTransform row, string label, UnityEngine.Events.UnityAction action)
+        internal Button AddButton(RectTransform row, string label, UnityEngine.Events.UnityAction action)
         {
             if (!row.TryGetComponent<HorizontalLayoutGroup>(out _))
             {
@@ -185,7 +188,7 @@ namespace PortalEscape
             return button;
         }
 
-        private Text AddText(RectTransform parent, string label, int size)
+        internal Text AddText(RectTransform parent, string label, int size)
         {
             var rect = Rect("Label", parent);
             rect.anchorMin = Vector2.zero;
@@ -202,7 +205,7 @@ namespace PortalEscape
             return text;
         }
 
-        private static void SetActiveColor(Button button, bool active)
+        internal static void SetActiveColor(Button button, bool active)
         {
             button.targetGraphic.color = active ? ActiveColor : ButtonColor;
         }

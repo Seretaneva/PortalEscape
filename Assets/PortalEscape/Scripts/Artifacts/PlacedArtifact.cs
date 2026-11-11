@@ -18,9 +18,9 @@ namespace PortalEscape
 
         private Vector3 markerOffset;
 
-        internal void Initialize(ArtifactDefinition definition)
+        internal void Initialize(ArtifactDefinition definition, string instanceId = null)
         {
-            Id = Guid.NewGuid().ToString("N");
+            Id = instanceId ?? Guid.NewGuid().ToString("N");
             Definition = definition;
             var model = Instantiate(definition.Prefab, transform, false);
             model.transform.localPosition = Vector3.zero;
